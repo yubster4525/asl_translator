@@ -1,0 +1,43 @@
+# Dataset files
+archive/asl_alphabet_train/
+archive/asl_alphabet_test/
+
+# Cache and precomputed files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.pkl
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Model files (large binary files)
+*.pth
+
+# Jupyter notebooks
+.ipynb_checkpoints
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE folders
+.idea/
+.vscode/
+
+# Personal configurations
+.env
