@@ -65,21 +65,70 @@ Both approaches provide real-time ASL alphabet translation using a webcam.
    pip install -r requirements.txt
    ```
 
-4. **Download the ASL Alphabet dataset** (if not already included)
+4. **Download the ASL Alphabet dataset:**
+   
+   You can download the ASL Alphabet dataset from Kaggle:
+   https://www.kaggle.com/datasets/grassknoted/asl-alphabet
+
+   After downloading:
+   
+   a. Extract the zip file
+   b. Place the extracted folders in the `data/` directory with the following structure:
+   
+   ```
+   data/
+   └── asl_alphabet/
+       ├── A/
+       │   ├── image_1.jpg
+       │   ├── image_2.jpg
+       │   └── ...
+       ├── B/
+       │   ├── image_1.jpg
+       │   └── ...
+       └── ...  # Folders for each letter (A-Z), plus 'space' and 'nothing'
+   ```
 
 ## Training a Model
 
+### Dataset Preparation
+
+The dataset should contain 28 class folders:
+- 26 alphabet letters (A-Z)
+- 'space' folder for the space gesture
+- 'nothing' folder for no gesture
+
+Each folder should contain multiple image samples of hands forming the corresponding sign.
+
 ### Training the Keypoint-based Model
 
-```
+This approach first extracts hand landmarks using MediaPipe and trains an MLP classifier:
+
+```bash
+# Train directly
 python src/models/train_keypoint_model.py --data_dir data/asl_alphabet --epochs 20
+
+# For faster training, precompute keypoints first
+python src/data_processing/precompute_keypoints.py --data_dir data/asl_alphabet --output data/precomputed_keypoints.npz
+python src/models/train_keypoint_model.py --data_dir data/asl_alphabet --precomputed_keypoints data/precomputed_keypoints.npz --epochs 20
 ```
+
+**Optional Parameters:**
+- `--batch_size`: Set the batch size (default: 32)
+- `--learning_rate`: Set the learning rate (default: 0.001)
+- `--output_dir`: Specify where to save the model (default: 'models/')
 
 ### Training the CNN-based Model
 
-```
+This approach trains a CNN directly on hand images:
+
+```bash
 python src/models/train_cnn_model.py --data_dir data/asl_alphabet --epochs 20
 ```
+
+**Optional Parameters:**
+- `--batch_size`: Set the batch size (default: 32)
+- `--learning_rate`: Set the learning rate (default: 0.001)
+- `--output_dir`: Specify where to save the model (default: 'models/')
 
 ## Running the Translator
 
@@ -96,6 +145,15 @@ python src/web/app.py
 ```
 
 Then open your browser to http://localhost:5000
+
+The web interface provides:
+
+1. **Translation Tab**: Real-time ASL alphabet translation through your webcam
+2. **Training Tab**: Interface to train new models with customizable parameters
+   - Select model type (CNN or Keypoint)
+   - Set training hyperparameters (epochs, batch size, learning rate)
+   - Monitor training progress with real-time logs
+   - View training history plots after completion
 
 ## Future Improvements
 

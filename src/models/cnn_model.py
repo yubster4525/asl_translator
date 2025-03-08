@@ -79,7 +79,7 @@ class ASLCNN(nn.Module):
         return x
 
 
-def train_epoch(model, device, train_loader, criterion, optimizer):
+def train_epoch(model, device, train_loader, criterion, optimizer, epoch=1, progress_callback=None):
     """
     Train model for one epoch.
     
@@ -89,6 +89,8 @@ def train_epoch(model, device, train_loader, criterion, optimizer):
         train_loader: DataLoader for training data
         criterion: Loss function
         optimizer: Optimizer
+        epoch: Current epoch number
+        progress_callback: Optional callback for progress tracking
     
     Returns:
         epoch_loss, epoch_acc: Loss and accuracy for the epoch
@@ -101,7 +103,7 @@ def train_epoch(model, device, train_loader, criterion, optimizer):
     # Progress bar
     pbar = tqdm(train_loader, desc="Training", leave=False)
     
-    for inputs, targets in pbar:
+    for i, (inputs, targets) in enumerate(pbar):
         inputs, targets = inputs.to(device), targets.to(device)
         
         # Zero parameter gradients
@@ -124,6 +126,10 @@ def train_epoch(model, device, train_loader, criterion, optimizer):
             'loss': f"{running_loss/total:.4f}", 
             'acc': f"{100*correct/total:.2f}%"
         })
+        
+        # Update progress callback if provided
+        if progress_callback:
+            progress_callback.update(epoch, i + 1)
     
     # Calculate epoch metrics
     epoch_loss = running_loss / total
@@ -180,8 +186,8 @@ def validate_epoch(model, device, val_loader, criterion):
     return epoch_loss, epoch_acc
 
 
-def train_cnn_model(train_loader, val_loader, num_classes, device, 
-                    epochs=10, lr=0.001, output_dir="models"):
+def train_cnn_model(train_loader, val_loader, num_classes, device=None, 
+                    epochs=10, lr=0.001, output_dir="models", progress_callback=None):
     """
     Train a CNN-based ASL classifier.
     
@@ -193,11 +199,16 @@ def train_cnn_model(train_loader, val_loader, num_classes, device,
         epochs: Number of training epochs
         lr: Learning rate
         output_dir: Directory to save model and plots
+        progress_callback: Optional callback for progress tracking
     
     Returns:
         model: Trained model
         history: Dictionary with training history
     """
+    # Set device if not provided
+    if device is None:
+        device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    
     # Create model
     model = ASLCNN(num_classes=num_classes).to(device)
     
@@ -225,12 +236,19 @@ def train_cnn_model(train_loader, val_loader, num_classes, device,
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
     
+    # Set up progress callback if provided
+    if progress_callback:
+        progress_callback.set_params(epochs, len(train_loader))
+    
     # Training loop
     for epoch in range(1, epochs + 1):
         print(f"\nEpoch {epoch}/{epochs}")
         
         # Train and validate
-        train_loss, train_acc = train_epoch(model, device, train_loader, criterion, optimizer)
+        train_loss, train_acc = train_epoch(
+            model, device, train_loader, criterion, optimizer,
+            epoch=epoch, progress_callback=progress_callback
+        )
         val_loss, val_acc = validate_epoch(model, device, val_loader, criterion)
         
         # Update learning rate
@@ -238,9 +256,9 @@ def train_cnn_model(train_loader, val_loader, num_classes, device,
         
         # Update history
         history['train_loss'].append(train_loss)
-        history['train_acc'].append(train_acc)
+        history['train_acc'].append(train_acc * 100)  # Convert to percentage
         history['val_loss'].append(val_loss)
-        history['val_acc'].append(val_acc)
+        history['val_acc'].append(val_acc * 100)  # Convert to percentage
         
         # Print epoch results
         print(f"  Train Loss: {train_loss:.4f}, Acc: {train_acc*100:.2f}%")
@@ -251,6 +269,10 @@ def train_cnn_model(train_loader, val_loader, num_classes, device,
             best_val_acc = val_acc
             torch.save(model.state_dict(), os.path.join(output_dir, "best_asl_model.pth"))
             print(f"  New best model saved! Validation Accuracy: {val_acc*100:.2f}%")
+        
+        # Update progress callback for epoch completion
+        if progress_callback:
+            progress_callback.update(epoch)
     
     # Save final model
     torch.save(model.state_dict(), os.path.join(output_dir, "final_asl_model.pth"))

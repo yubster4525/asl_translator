@@ -9,13 +9,25 @@ import cv2
 import torch
 import numpy as np
 import base64
-from flask import Flask, render_template, request, jsonify
+import threading
+import time
+from flask import Flask, render_template, request, jsonify, Response
 from PIL import Image
 import io
+import sys
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+
+# Add the project root to the path so we can import modules
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.utils.keypoint_extraction import extract_keypoints
 from src.models.cnn_model import ASLCNN
 from src.models.keypoint_model import KeypointMLP
+from src.utils.data_utils import ASLImageDataset, ASLKeypointDataset, create_data_loaders
+from src.models.train_cnn_model import train_cnn_model
+from src.models.train_keypoint_model import train_keypoint_model
+import torchvision.transforms as transforms
 
 
 # Initialize Flask app
@@ -29,6 +41,13 @@ device = None
 class_names = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 
                'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 
                'space', 'nothing']
+
+# Training globals
+training_thread = None
+training_log = []
+training_status = "idle"
+training_progress = 0
+training_history = None
 
 
 def init_models():
@@ -76,6 +95,259 @@ def index():
     """Render the main page."""
     available_models = list(models.keys())
     return render_template('index.html', available_models=available_models)
+
+
+# Custom progress callback for training
+class ProgressCallback:
+    def __init__(self):
+        self.epochs = 0
+        self.current_epoch = 0
+        self.step = 0
+        self.steps_per_epoch = 0
+        
+    def set_params(self, epochs, steps_per_epoch):
+        self.epochs = epochs
+        self.steps_per_epoch = steps_per_epoch
+        self.current_epoch = 0
+        self.step = 0
+        
+    def update(self, epoch, step=None):
+        global training_progress
+        self.current_epoch = epoch
+        if step is not None:
+            self.step = step
+            # Calculate overall progress (0-100)
+            if self.epochs > 0 and self.steps_per_epoch > 0:
+                progress = ((epoch - 1) / self.epochs) * 100
+                if step > 0:
+                    progress += (step / self.steps_per_epoch) * (100 / self.epochs)
+                training_progress = min(99, int(progress))  # Cap at 99 until completely done
+        else:
+            # If only epoch is updated, calculate based on completed epochs
+            training_progress = min(99, int((epoch / self.epochs) * 100))
+
+
+def train_model_thread(model_type, data_dir, epochs, batch_size, learning_rate, use_precomputed=False):
+    """Background thread for model training."""
+    global training_status, training_log, models, device, training_progress, training_history
+    
+    try:
+        training_status = "preparing"
+        training_log.append(f"Starting {model_type} model training...")
+        training_log.append(f"Data directory: {data_dir}")
+        training_log.append(f"Epochs: {epochs}, Batch size: {batch_size}, Learning rate: {learning_rate}")
+        
+        # Set up progress callback
+        progress_callback = ProgressCallback()
+        
+        # Ensure models directory exists
+        os.makedirs('models', exist_ok=True)
+        
+        # Create output directory for training artifacts
+        output_dir = 'models'
+        
+        if model_type == 'cnn':
+            # Define data transforms for CNN
+            data_transforms = transforms.Compose([
+                transforms.ToPILImage(),
+                transforms.Resize((224, 224)),
+                transforms.RandomHorizontalFlip(),
+                transforms.RandomRotation(10),
+                transforms.ColorJitter(brightness=0.2, contrast=0.2),
+                transforms.ToTensor(),
+                transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+            ])
+            
+            # Create dataset
+            training_log.append(f"Loading dataset from {data_dir}...")
+            dataset = ASLImageDataset(
+                root_dir=data_dir,
+                transform=data_transforms,
+                img_size=(224, 224)
+            )
+            
+            # Create data loaders
+            train_loader, val_loader = create_data_loaders(
+                dataset, 
+                batch_size=batch_size,
+                val_split=0.15
+            )
+            
+            # Set progress callback parameters
+            progress_callback.set_params(epochs, len(train_loader))
+            
+            # Train CNN model
+            training_status = "training"
+            training_log.append(f"Starting CNN training for {epochs} epochs...")
+            model, history = train_cnn_model(
+                train_loader=train_loader,
+                val_loader=val_loader,
+                num_classes=len(dataset.classes),
+                device=device,
+                epochs=epochs,
+                lr=learning_rate,
+                output_dir=output_dir,
+                progress_callback=progress_callback
+            )
+            
+            # Update global model
+            models['cnn'] = model
+            
+        else:  # keypoint model
+            if use_precomputed and os.path.exists(use_precomputed):
+                # Use precomputed keypoints
+                training_log.append(f"Using precomputed keypoints from {use_precomputed}")
+                dataset = ASLKeypointDataset(
+                    root_dir=data_dir,
+                    precomputed_keypoints=use_precomputed
+                )
+            else:
+                # Extract keypoints on the fly
+                training_log.append("Extracting keypoints on the fly (this might be slow)...")
+                dataset = ASLKeypointDataset(
+                    root_dir=data_dir
+                )
+            
+            # Create data loaders
+            train_loader, val_loader = create_data_loaders(
+                dataset, 
+                batch_size=batch_size,
+                val_split=0.15
+            )
+            
+            # Set progress callback parameters
+            progress_callback.set_params(epochs, len(train_loader))
+            
+            # Train keypoint model
+            training_status = "training"
+            training_log.append(f"Starting keypoint model training for {epochs} epochs...")
+            model, history = train_keypoint_model(
+                train_loader=train_loader,
+                val_loader=val_loader,
+                input_dim=42,  # 21 keypoints with x,y coordinates
+                num_classes=len(dataset.classes),
+                device=device,
+                epochs=epochs,
+                lr=learning_rate,
+                output_dir=output_dir,
+                progress_callback=progress_callback
+            )
+            
+            # Update global model
+            models['keypoint'] = model
+        
+        # Save training history for plotting
+        training_history = history
+        
+        # Training complete
+        training_status = "completed"
+        training_progress = 100
+        training_log.append("Training completed successfully!")
+        training_log.append(f"Final training accuracy: {history['train_acc'][-1]:.2f}%")
+        training_log.append(f"Final validation accuracy: {history['val_acc'][-1]:.2f}%")
+        training_log.append(f"Model saved to {output_dir}")
+        
+    except Exception as e:
+        # Handle exceptions
+        training_status = "failed"
+        training_log.append(f"ERROR: Training failed: {str(e)}")
+        import traceback
+        training_log.append(traceback.format_exc())
+
+
+@app.route('/train', methods=['POST'])
+def train_model():
+    """Start model training."""
+    global training_thread, training_status, training_log, training_progress, training_history
+    
+    # Check if training already in progress
+    if training_thread and training_thread.is_alive():
+        return jsonify({
+            'status': 'error',
+            'message': 'Training already in progress'
+        })
+    
+    # Get training parameters
+    model_type = request.form.get('model_type', 'keypoint')
+    data_dir = request.form.get('data_dir', 'data/asl_alphabet')
+    epochs = int(request.form.get('epochs', 10))
+    batch_size = int(request.form.get('batch_size', 32))
+    learning_rate = float(request.form.get('learning_rate', 0.001))
+    use_precomputed = request.form.get('precomputed_keypoints', False)
+    
+    if use_precomputed == 'false':
+        use_precomputed = False
+    
+    # Reset training state
+    training_status = "starting"
+    training_log = []
+    training_progress = 0
+    training_history = None
+    
+    # Start training in a background thread
+    training_thread = threading.Thread(
+        target=train_model_thread,
+        args=(model_type, data_dir, epochs, batch_size, learning_rate, use_precomputed)
+    )
+    training_thread.daemon = True
+    training_thread.start()
+    
+    return jsonify({
+        'status': 'success',
+        'message': 'Training started'
+    })
+
+
+@app.route('/training_status')
+def get_training_status():
+    """Get current training status."""
+    global training_status, training_log, training_progress
+    
+    return jsonify({
+        'status': training_status,
+        'progress': training_progress,
+        'log': training_log
+    })
+
+
+@app.route('/training_plot')
+def get_training_plot():
+    """Generate and return a training history plot."""
+    global training_history
+    
+    if training_history is None:
+        return Response("No training history available", status=404)
+    
+    # Create a figure with accuracy and loss subplots
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 8))
+    
+    # Plot accuracy
+    ax1.plot(training_history['train_acc'], label='Training Accuracy')
+    ax1.plot(training_history['val_acc'], label='Validation Accuracy')
+    ax1.set_title('Model Accuracy')
+    ax1.set_xlabel('Epoch')
+    ax1.set_ylabel('Accuracy (%)')
+    ax1.legend()
+    ax1.grid(True)
+    
+    # Plot loss
+    ax2.plot(training_history['train_loss'], label='Training Loss')
+    ax2.plot(training_history['val_loss'], label='Validation Loss')
+    ax2.set_title('Model Loss')
+    ax2.set_xlabel('Epoch')
+    ax2.set_ylabel('Loss')
+    ax2.legend()
+    ax2.grid(True)
+    
+    fig.tight_layout()
+    
+    # Convert plot to PNG image
+    output = io.BytesIO()
+    FigureCanvas(fig).print_png(output)
+    plt.close(fig)
+    
+    # Return the image
+    return Response(output.getvalue(), mimetype='image/png')
 
 
 def base64_to_image(base64_string):

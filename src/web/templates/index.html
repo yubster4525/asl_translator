@@ -15,91 +15,241 @@
             <p class="lead">Real-time American Sign Language Alphabet Translation</p>
         </header>
 
-        <div class="row">
-            <!-- Webcam and Model Controls -->
-            <div class="col-md-8">
-                <div class="card mb-4">
-                    <div class="card-header">
-                        <div class="d-flex justify-content-between align-items-center">
-                            <h3 class="mb-0">Live Translation</h3>
-                            <div class="form-check form-switch">
-                                <input class="form-check-input" type="checkbox" id="webcamToggle" checked>
-                                <label class="form-check-label" for="webcamToggle">Webcam</label>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card-body text-center">
-                        <!-- Webcam display -->
-                        <div id="webcam-container">
-                            <video id="webcam" autoplay playsinline width="640" height="480"></video>
-                            <canvas id="canvas" width="640" height="480"></canvas>
-                        </div>
-                        <div id="status-message" class="alert alert-info mt-2 d-none"></div>
-                    </div>
-                    <div class="card-footer">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="form-group">
-                                    <label for="modelSelect">Model Type</label>
-                                    <select id="modelSelect" class="form-select">
-                                        {% for model in available_models %}
-                                        <option value="{{ model }}">{{ model|title }}</option>
-                                        {% endfor %}
-                                    </select>
+        <!-- Navigation Tabs -->
+        <ul class="nav nav-tabs mb-4" id="mainTab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="translate-tab" data-bs-toggle="tab" data-bs-target="#translate" type="button" role="tab" aria-controls="translate" aria-selected="true">
+                    Translation
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="train-tab" data-bs-toggle="tab" data-bs-target="#train" type="button" role="tab" aria-controls="train" aria-selected="false">
+                    Train Model
+                </button>
+            </li>
+        </ul>
+
+        <!-- Tab Content -->
+        <div class="tab-content" id="mainTabContent">
+            <!-- Translation Tab -->
+            <div class="tab-pane fade show active" id="translate" role="tabpanel" aria-labelledby="translate-tab">
+                <div class="row">
+                    <!-- Webcam and Model Controls -->
+                    <div class="col-md-8">
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <h3 class="mb-0">Live Translation</h3>
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="webcamToggle" checked>
+                                        <label class="form-check-label" for="webcamToggle">Webcam</label>
+                                    </div>
                                 </div>
                             </div>
-                            <div class="col-md-6 text-end">
-                                <button id="startBtn" class="btn btn-primary mt-2" disabled>Start Translation</button>
-                                <button id="stopBtn" class="btn btn-danger mt-2 d-none">Stop Translation</button>
+                            <div class="card-body text-center">
+                                <!-- Webcam display -->
+                                <div id="webcam-container">
+                                    <video id="webcam" autoplay playsinline width="640" height="480"></video>
+                                    <canvas id="canvas" width="640" height="480"></canvas>
+                                </div>
+                                <div id="status-message" class="alert alert-info mt-2 d-none"></div>
+                            </div>
+                            <div class="card-footer">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <div class="form-group">
+                                            <label for="modelSelect">Model Type</label>
+                                            <select id="modelSelect" class="form-select">
+                                                {% for model in available_models %}
+                                                <option value="{{ model }}">{{ model|title }}</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-6 text-end">
+                                        <button id="startBtn" class="btn btn-primary mt-2" disabled>Start Translation</button>
+                                        <button id="stopBtn" class="btn btn-danger mt-2 d-none">Stop Translation</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Prediction Results -->
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="mb-0">Prediction</h3>
+                            </div>
+                            <div class="card-body">
+                                <div class="text-center mb-4">
+                                    <div id="predictionDisplay" class="display-1">?</div>
+                                    <div id="confidenceDisplay" class="text-muted">Confidence: 0%</div>
+                                </div>
+                                
+                                <div id="translationHistory" class="p-2 border rounded bg-light" style="min-height: 100px;">
+                                    <h5>Translation History</h5>
+                                    <div id="historyText"></div>
+                                </div>
+                                
+                                <div class="d-grid gap-2 mt-3">
+                                    <button id="clearHistoryBtn" class="btn btn-outline-secondary">Clear History</button>
+                                    <button id="appendBtn" class="btn btn-success">Add to History</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Instructions -->
+                <div class="row mt-4">
+                    <div class="col">
+                        <div class="card">
+                            <div class="card-header">
+                                <h3>How to Use</h3>
+                            </div>
+                            <div class="card-body">
+                                <ol>
+                                    <li>Grant camera access when prompted</li>
+                                    <li>Position your hand in the frame with the ASL sign</li>
+                                    <li>Select the model type from the dropdown menu</li>
+                                    <li>Click "Start Translation" to begin real-time translation</li>
+                                    <li>Click "Add to History" to save the current prediction</li>
+                                </ol>
+                                <div class="alert alert-primary">
+                                    <strong>Tip:</strong> For best results, use good lighting and position your hand clearly against a simple background.
+                                </div>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Prediction Results -->
-            <div class="col-md-4">
-                <div class="card">
-                    <div class="card-header">
-                        <h3 class="mb-0">Prediction</h3>
-                    </div>
-                    <div class="card-body">
-                        <div class="text-center mb-4">
-                            <div id="predictionDisplay" class="display-1">?</div>
-                            <div id="confidenceDisplay" class="text-muted">Confidence: 0%</div>
-                        </div>
-                        
-                        <div id="translationHistory" class="p-2 border rounded bg-light" style="min-height: 100px;">
-                            <h5>Translation History</h5>
-                            <div id="historyText"></div>
-                        </div>
-                        
-                        <div class="d-grid gap-2 mt-3">
-                            <button id="clearHistoryBtn" class="btn btn-outline-secondary">Clear History</button>
-                            <button id="appendBtn" class="btn btn-success">Add to History</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+            <!-- Training Tab -->
+            <div class="tab-pane fade" id="train" role="tabpanel" aria-labelledby="train-tab">
+                <div class="row">
+                    <!-- Training Form -->
+                    <div class="col-md-6">
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h3 class="mb-0">Train a New Model</h3>
+                            </div>
+                            <div class="card-body">
+                                <form id="trainForm">
+                                    <!-- Model Type -->
+                                    <div class="mb-3">
+                                        <label for="modelTypeSelect" class="form-label">Model Type</label>
+                                        <select id="modelTypeSelect" name="model_type" class="form-select">
+                                            <option value="keypoint">Keypoint Model (MLP)</option>
+                                            <option value="cnn">CNN Model</option>
+                                        </select>
+                                        <div class="form-text">Keypoint model trains faster but may be less accurate. CNN model is more accurate but takes longer to train.</div>
+                                    </div>
 
-        <!-- Instructions -->
-        <div class="row mt-4">
-            <div class="col">
-                <div class="card">
-                    <div class="card-header">
-                        <h3>How to Use</h3>
+                                    <!-- Data Directory -->
+                                    <div class="mb-3">
+                                        <label for="dataDirInput" class="form-label">Data Directory</label>
+                                        <input type="text" class="form-control" id="dataDirInput" name="data_dir" value="data/asl_alphabet" required>
+                                        <div class="form-text">Path to the folder containing class folders (A-Z, space, nothing)</div>
+                                    </div>
+
+                                    <!-- Training Parameters -->
+                                    <div class="row mb-3">
+                                        <div class="col">
+                                            <label for="epochsInput" class="form-label">Epochs</label>
+                                            <input type="number" class="form-control" id="epochsInput" name="epochs" value="10" min="1" max="100" required>
+                                        </div>
+                                        <div class="col">
+                                            <label for="batchSizeInput" class="form-label">Batch Size</label>
+                                            <input type="number" class="form-control" id="batchSizeInput" name="batch_size" value="32" min="1" max="256" required>
+                                        </div>
+                                        <div class="col">
+                                            <label for="learningRateInput" class="form-label">Learning Rate</label>
+                                            <input type="number" class="form-control" id="learningRateInput" name="learning_rate" value="0.001" min="0.0001" max="0.1" step="0.0001" required>
+                                        </div>
+                                    </div>
+
+                                    <!-- Precomputed Keypoints (for keypoint model) -->
+                                    <div class="mb-3" id="precomputedKeypointsGroup">
+                                        <label for="precomputedKeypoints" class="form-label">Precomputed Keypoints File</label>
+                                        <input type="text" class="form-control" id="precomputedKeypoints" name="precomputed_keypoints" placeholder="data/precomputed_keypoints.npz (optional)">
+                                        <div class="form-text">Path to precomputed keypoints file. Leave empty to extract keypoints during training.</div>
+                                    </div>
+
+                                    <!-- Submit Button -->
+                                    <div class="d-grid gap-2">
+                                        <button type="submit" id="trainBtn" class="btn btn-primary">Start Training</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+
+                        <!-- Training Guide -->
+                        <div class="card">
+                            <div class="card-header">
+                                <h3 class="mb-0">Training Guide</h3>
+                            </div>
+                            <div class="card-body">
+                                <h5>Dataset Requirements</h5>
+                                <p>The dataset should be organized in the following structure:</p>
+                                <pre><code>data/asl_alphabet/
+  ├── A/
+  │   ├── image_1.jpg
+  │   ├── image_2.jpg
+  │   └── ...
+  ├── B/
+  │   ├── image_1.jpg
+  │   └── ...
+  └── ... (folders for each letter, plus 'space' and 'nothing')</code></pre>
+
+                                <h5>Training Process</h5>
+                                <ol>
+                                    <li>Download the <a href="https://www.kaggle.com/datasets/grassknoted/asl-alphabet" target="_blank">ASL Alphabet dataset from Kaggle</a></li>
+                                    <li>Extract and organize the dataset as shown above</li>
+                                    <li>Select the model type and set training parameters</li>
+                                    <li>Click "Start Training" to begin the training process</li>
+                                    <li>Monitor the progress and results in the Training Status panel</li>
+                                </ol>
+
+                                <div class="alert alert-info">
+                                    <strong>Note:</strong> Training may take several minutes to hours depending on your hardware, dataset size, and chosen parameters.
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="card-body">
-                        <ol>
-                            <li>Grant camera access when prompted</li>
-                            <li>Position your hand in the frame with the ASL sign</li>
-                            <li>Select the model type from the dropdown menu</li>
-                            <li>Click "Start Translation" to begin real-time translation</li>
-                            <li>Click "Add to History" to save the current prediction</li>
-                        </ol>
-                        <div class="alert alert-primary">
-                            <strong>Tip:</strong> For best results, use good lighting and position your hand clearly against a simple background.
+
+                    <!-- Training Status -->
+                    <div class="col-md-6">
+                        <div class="card mb-4">
+                            <div class="card-header">
+                                <h3 class="mb-0">Training Status</h3>
+                            </div>
+                            <div class="card-body">
+                                <!-- Progress -->
+                                <div class="mb-3">
+                                    <label id="trainingStatusLabel" class="form-label">Status: <span id="trainingStatus">Idle</span></label>
+                                    <div class="progress">
+                                        <div id="trainingProgress" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100" style="width: 0%"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Log Output -->
+                                <div class="mb-3">
+                                    <label class="form-label">Training Log</label>
+                                    <div id="trainingLog" class="p-2 border rounded bg-light" style="height: 200px; overflow-y: auto; font-family: monospace; white-space: pre-wrap;"></div>
+                                </div>
+
+                                <!-- Training Plot -->
+                                <div id="trainingPlotContainer" class="mb-3 d-none">
+                                    <label class="form-label">Training Results</label>
+                                    <img id="trainingPlot" class="img-fluid border rounded" src="">
+                                </div>
+
+                                <!-- Actions -->
+                                <div class="d-grid gap-2">
+                                    <button id="refreshStatusBtn" class="btn btn-secondary">Refresh Status</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

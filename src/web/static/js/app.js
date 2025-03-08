@@ -211,46 +211,207 @@ function toggleTranslation(start) {
     }
 }
 
+// Training functions
+let trainingStatusInterval = null;
+
+// Start model training
+async function startTraining(formData) {
+    try {
+        // Reset training UI
+        document.getElementById('trainingStatus').textContent = 'Starting...';
+        document.getElementById('trainingProgress').style.width = '0%';
+        document.getElementById('trainingLog').textContent = '';
+        document.getElementById('trainingPlotContainer').classList.add('d-none');
+        
+        // Submit training request
+        const response = await fetch('/train', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (result.status === 'success') {
+            // Start polling for status updates
+            startStatusPolling();
+            
+            // Disable form while training
+            document.getElementById('trainBtn').disabled = true;
+            document.getElementById('trainForm').classList.add('opacity-50');
+            
+            // Show message
+            alert('Training started successfully! Monitor progress in the Training Status panel.');
+        } else {
+            alert('Error starting training: ' + result.message);
+        }
+    } catch (error) {
+        console.error('Error submitting training request:', error);
+        alert('Network error: ' + error.message);
+    }
+}
+
+// Poll training status
+function startStatusPolling() {
+    // Clear any existing interval
+    if (trainingStatusInterval) {
+        clearInterval(trainingStatusInterval);
+    }
+    
+    // Start new polling interval
+    trainingStatusInterval = setInterval(updateTrainingStatus, 2000);
+}
+
+// Update training status
+async function updateTrainingStatus() {
+    try {
+        const response = await fetch('/training_status');
+        const data = await response.json();
+        
+        // Update status and progress
+        document.getElementById('trainingStatus').textContent = capitalizeFirst(data.status);
+        document.getElementById('trainingProgress').style.width = `${data.progress}%`;
+        document.getElementById('trainingProgress').setAttribute('aria-valuenow', data.progress);
+        
+        // Update log
+        const logElement = document.getElementById('trainingLog');
+        logElement.textContent = data.log.join('\n');
+        
+        // Auto-scroll to bottom
+        logElement.scrollTop = logElement.scrollHeight;
+        
+        // Show plot if training is completed
+        if (data.status === 'completed') {
+            // Stop polling
+            clearInterval(trainingStatusInterval);
+            trainingStatusInterval = null;
+            
+            // Show plot
+            document.getElementById('trainingPlotContainer').classList.remove('d-none');
+            document.getElementById('trainingPlot').src = `/training_plot?t=${Date.now()}`; // Add timestamp to prevent caching
+            
+            // Re-enable form
+            document.getElementById('trainBtn').disabled = false;
+            document.getElementById('trainForm').classList.remove('opacity-50');
+            
+            // Make sure progress bar is at 100%
+            document.getElementById('trainingProgress').style.width = '100%';
+            document.getElementById('trainingProgress').setAttribute('aria-valuenow', 100);
+        }
+        
+        // If training failed, stop polling
+        if (data.status === 'failed') {
+            clearInterval(trainingStatusInterval);
+            trainingStatusInterval = null;
+            
+            // Re-enable form
+            document.getElementById('trainBtn').disabled = false;
+            document.getElementById('trainForm').classList.remove('opacity-50');
+        }
+        
+    } catch (error) {
+        console.error('Error updating training status:', error);
+    }
+}
+
+// Helper function to capitalize first letter
+function capitalizeFirst(string) {
+    return string.charAt(0).toUpperCase() + string.slice(1);
+}
+
+// Toggle precomputed keypoints field based on model type
+function togglePrecomputedField() {
+    const modelType = document.getElementById('modelTypeSelect').value;
+    const precomputedGroup = document.getElementById('precomputedKeypointsGroup');
+    
+    if (modelType === 'keypoint') {
+        precomputedGroup.style.display = 'block';
+    } else {
+        precomputedGroup.style.display = 'none';
+    }
+}
+
 // Event listeners
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize webcam if toggle is on
-    if (webcamToggle.checked) {
+    if (webcamToggle && webcamToggle.checked) {
         initWebcam();
     }
     
+    // --- Translation Tab Event Listeners ---
+    
     // Webcam toggle
-    webcamToggle.addEventListener('change', () => {
-        if (webcamToggle.checked) {
-            initWebcam();
-        } else {
-            stopWebcam();
-            toggleTranslation(false);
-            startBtn.disabled = true;
-        }
-    });
+    if (webcamToggle) {
+        webcamToggle.addEventListener('change', () => {
+            if (webcamToggle.checked) {
+                initWebcam();
+            } else {
+                stopWebcam();
+                toggleTranslation(false);
+                startBtn.disabled = true;
+            }
+        });
+    }
     
     // Start button
-    startBtn.addEventListener('click', () => {
-        toggleTranslation(true);
-    });
+    if (startBtn) {
+        startBtn.addEventListener('click', () => {
+            toggleTranslation(true);
+        });
+    }
     
     // Stop button
-    stopBtn.addEventListener('click', () => {
-        toggleTranslation(false);
-    });
+    if (stopBtn) {
+        stopBtn.addEventListener('click', () => {
+            toggleTranslation(false);
+        });
+    }
     
     // Append button
-    appendBtn.addEventListener('click', appendToHistory);
+    if (appendBtn) {
+        appendBtn.addEventListener('click', appendToHistory);
+    }
     
     // Clear history button
-    clearHistoryBtn.addEventListener('click', clearHistory);
+    if (clearHistoryBtn) {
+        clearHistoryBtn.addEventListener('click', clearHistory);
+    }
     
     // Model select change
-    modelSelect.addEventListener('change', () => {
-        showStatusMessage(`Switched to ${modelSelect.value} model`);
-        
-        // Reset buffer when changing models
-        translationBuffer = [];
-        currentPrediction = null;
-    });
+    if (modelSelect) {
+        modelSelect.addEventListener('change', () => {
+            showStatusMessage(`Switched to ${modelSelect.value} model`);
+            
+            // Reset buffer when changing models
+            translationBuffer = [];
+            currentPrediction = null;
+        });
+    }
+    
+    // --- Training Tab Event Listeners ---
+    
+    // Model type change
+    const modelTypeSelect = document.getElementById('modelTypeSelect');
+    if (modelTypeSelect) {
+        togglePrecomputedField(); // Initial toggle
+        modelTypeSelect.addEventListener('change', togglePrecomputedField);
+    }
+    
+    // Training form submission
+    const trainForm = document.getElementById('trainForm');
+    if (trainForm) {
+        trainForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const formData = new FormData(trainForm);
+            startTraining(formData);
+        });
+    }
+    
+    // Refresh status button
+    const refreshStatusBtn = document.getElementById('refreshStatusBtn');
+    if (refreshStatusBtn) {
+        refreshStatusBtn.addEventListener('click', updateTrainingStatus);
+    }
+    
+    // Check if we should show training status on page load
+    updateTrainingStatus();
 });
