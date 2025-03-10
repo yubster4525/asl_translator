@@ -103,13 +103,30 @@ Each folder should contain multiple image samples of hands forming the correspon
 
 This approach first extracts hand landmarks using MediaPipe and trains an MLP classifier:
 
-```bash
-# Train directly
-python src/models/train_keypoint_model.py --data_dir data/asl_alphabet --epochs 20
+There are two ways to train the keypoint-based model:
 
-# For faster training, precompute keypoints first
-python src/data_processing/precompute_keypoints.py --data_dir data/asl_alphabet --output data/precomputed_keypoints.npz
-python src/models/train_keypoint_model.py --data_dir data/asl_alphabet --precomputed_keypoints data/precomputed_keypoints.npz --epochs 20
+#### Method 1: Direct Training (Slower)
+
+This method extracts keypoints from images during training, which is slower but doesn't require preprocessing.
+
+```bash
+python src/models/train_keypoint_model.py --data_dir data/asl_alphabet/asl_alphabet_train/asl_alphabet_train --epochs 20
+```
+
+#### Method 2: Using Precomputed Keypoints (Recommended)
+
+This method is much faster as it precomputes and saves keypoints before training.
+
+**Step 1:** Precompute keypoints
+```bash
+# First, precompute keypoints from all images (this may take time but is a one-time operation)
+python precompute.py --data_dir data/asl_alphabet/asl_alphabet_train/asl_alphabet_train --output_file data/precomputed_keypoints.npz
+```
+
+**Step 2:** Train using the precomputed keypoints
+```bash
+# Then, train the model using the precomputed keypoints (much faster)
+python src/models/train_keypoint_model.py --data_dir data/asl_alphabet/asl_alphabet_train/asl_alphabet_train --precomputed_keypoints data/precomputed_keypoints.npz --epochs 20
 ```
 
 **Optional Parameters:**
@@ -122,7 +139,7 @@ python src/models/train_keypoint_model.py --data_dir data/asl_alphabet --precomp
 This approach trains a CNN directly on hand images:
 
 ```bash
-python src/models/train_cnn_model.py --data_dir data/asl_alphabet --epochs 20
+python src/models/train_cnn_model.py --data_dir data/asl_alphabet/asl_alphabet_train/asl_alphabet_train --epochs 20
 ```
 
 **Optional Parameters:**

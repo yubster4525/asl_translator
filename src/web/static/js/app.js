@@ -146,12 +146,17 @@ function updatePrediction(predClass, confidence) {
 // Add current prediction to history
 function appendToHistory() {
     if (translationBuffer.length >= bufferThreshold) {
-        // Convert 'space' and 'nothing' to actual space or nothing
+        // Convert 'space', 'nothing', and 'del' to appropriate actions
         let characterToAdd = currentPrediction;
         if (characterToAdd === 'space') {
             characterToAdd = ' ';
         } else if (characterToAdd === 'nothing') {
             characterToAdd = '';
+        } else if (characterToAdd === 'del') {
+            // Delete the last character
+            historyText.textContent = historyText.textContent.slice(0, -1);
+            translationBuffer = [];
+            return; // Exit early, we don't want to add anything
         }
         
         historyText.textContent += characterToAdd;

@@ -5,8 +5,13 @@ This script trains an MLP model on ASL hand keypoints and saves the model and tr
 """
 
 import os
+import sys
 import argparse
 import torch
+
+# Add the project root to the path so we can import modules
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../.."))
+sys.path.append(project_root)
 
 from src.utils.data_utils import ASLKeypointDataset, create_data_loaders
 from src.models.keypoint_model import train_keypoint_model

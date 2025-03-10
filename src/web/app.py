@@ -40,7 +40,7 @@ models = {}
 device = None
 class_names = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 
                'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 
-               'space', 'nothing']
+               'space', 'nothing', 'del']  # Added 'del' class to match the model
 
 # Training globals
 training_thread = None
@@ -73,18 +73,54 @@ def init_models():
     # Load CNN model if available
     if os.path.exists(cnn_model_path):
         print(f"Loading CNN model from {cnn_model_path}")
-        cnn_model = ASLCNN(num_classes=len(class_names)).to(device)
-        cnn_model.load_state_dict(torch.load(cnn_model_path, map_location=device))
-        cnn_model.eval()
-        models['cnn'] = cnn_model
+        try:
+            # Try loading the model directly
+            cnn_model = ASLCNN(num_classes=len(class_names)).to(device)
+            cnn_model.load_state_dict(torch.load(cnn_model_path, map_location=device))
+            cnn_model.eval()
+            models['cnn'] = cnn_model
+            print(f"Successfully loaded CNN model with {len(class_names)} classes")
+        except Exception as e:
+            print(f"Error loading CNN model: {str(e)}")
+            # If there's still an issue, try to detect the number of classes from the model file
+            try:
+                state_dict = torch.load(cnn_model_path, map_location=device)
+                # Get the shape of the last layer's weight to determine number of classes
+                output_size = state_dict['classifier.6.weight'].shape[0]
+                print(f"Detected {output_size} classes in saved CNN model")
+                cnn_model = ASLCNN(num_classes=output_size).to(device)
+                cnn_model.load_state_dict(state_dict)
+                cnn_model.eval()
+                models['cnn'] = cnn_model
+                print(f"Successfully loaded CNN model with corrected classes ({output_size})")
+            except Exception as nested_e:
+                print(f"Failed to load CNN model even after class correction: {str(nested_e)}")
     
     # Load Keypoint model if available
     if os.path.exists(keypoint_model_path):
         print(f"Loading Keypoint model from {keypoint_model_path}")
-        keypoint_model = KeypointMLP(input_dim=42, num_classes=len(class_names)).to(device)
-        keypoint_model.load_state_dict(torch.load(keypoint_model_path, map_location=device))
-        keypoint_model.eval()
-        models['keypoint'] = keypoint_model
+        try:
+            # Try loading the model directly
+            keypoint_model = KeypointMLP(input_dim=42, num_classes=len(class_names)).to(device)
+            keypoint_model.load_state_dict(torch.load(keypoint_model_path, map_location=device))
+            keypoint_model.eval()
+            models['keypoint'] = keypoint_model
+            print(f"Successfully loaded keypoint model with {len(class_names)} classes")
+        except Exception as e:
+            print(f"Error loading model: {str(e)}")
+            # If there's still an issue, try to detect the number of classes from the model file
+            try:
+                state_dict = torch.load(keypoint_model_path, map_location=device)
+                # Get the shape of the last layer's weight to determine number of classes
+                output_size = state_dict['fc.8.weight'].shape[0]
+                print(f"Detected {output_size} classes in saved model")
+                keypoint_model = KeypointMLP(input_dim=42, num_classes=output_size).to(device)
+                keypoint_model.load_state_dict(state_dict)
+                keypoint_model.eval()
+                models['keypoint'] = keypoint_model
+                print(f"Successfully loaded keypoint model with corrected classes ({output_size})")
+            except Exception as nested_e:
+                print(f"Failed to load model even after class correction: {str(nested_e)}")
     
     if not models:
         print("Warning: No models found. Please train models first.")
@@ -202,11 +238,21 @@ def train_model_thread(model_type, data_dir, epochs, batch_size, learning_rate, 
                     precomputed_keypoints=use_precomputed
                 )
             else:
-                # Extract keypoints on the fly
-                training_log.append("Extracting keypoints on the fly (this might be slow)...")
-                dataset = ASLKeypointDataset(
-                    root_dir=data_dir
-                )
+                # Try to find precomputed keypoints in the default location
+                default_keypoints_path = os.path.join('data', 'precomputed_keypoints.npz')
+                if os.path.exists(default_keypoints_path):
+                    training_log.append(f"Found precomputed keypoints at {default_keypoints_path}, using these for faster training...")
+                    dataset = ASLKeypointDataset(
+                        root_dir=data_dir,
+                        precomputed_keypoints=default_keypoints_path
+                    )
+                else:
+                    # Extract keypoints on the fly
+                    training_log.append("No precomputed keypoints found. Extracting keypoints on the fly (this might be slow)...")
+                    training_log.append("Tip: Run 'python precompute.py' first to speed up future training.")
+                    dataset = ASLKeypointDataset(
+                        root_dir=data_dir
+                    )
             
             # Create data loaders
             train_loader, val_loader = create_data_loaders(
